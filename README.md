@@ -8,7 +8,7 @@ cloudflare 动态 DNS（DDNS）！Cloudflare 的 DDNS 功能允许您通过 API 
 获取API密钥，并更改脚本以下内容
 用您的信息替换 <YOUR_EMAIL>、<YOUR_API_KEY>、<YOUR_DOMAIN> 和 <二级域名>
 ### 第三步，运行脚本
-`bash cloudflare_ddns.sh`
+`bash cf_ddns.sh`
 ### 第四步，设置定时任务
 5分钟运行一次
 `*/5 * * * * /bin/bash /path/to/cloudflare_ddns.sh`
