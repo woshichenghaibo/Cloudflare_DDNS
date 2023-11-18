@@ -7,7 +7,7 @@ zone_name="example.com"
 record_name="www.example.com"
 
 # MAYBE CHANGE THESE
-ip=$(curl -s http://sb)
+ip=$(curl -s ip.sb)
 ip_file="ip.txt"
 id_file="cloudflare.ids"
 log_file="cloudflare.log"
