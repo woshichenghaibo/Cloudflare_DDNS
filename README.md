@@ -14,5 +14,6 @@ Debian
 ### 第三步，运行脚本
 `bash cf_ddns.sh`
 ### 第四步，设置定时任务
+crontab -e
 5分钟运行一次
-`*/5 * * * * /bin/bash /path/to/cloudflare_ddns.sh`
+`*/5 * * * * /bin/bash /path/to/cf_ddns.sh`
