@@ -3,8 +3,9 @@
 # author: jinqian 
 # 网站: jinqians.com
 
-echo "author: jinqian "
-echo "网站: jinqians.com"
+echo -e "\033[1;31m author:\033[0m \033[1;32m jinqian \033[0m"
+echo -e "\033[1;31m website:\033[0m \033[1;32m https://jinqians.com \033[0m"
+
 
 
 # Function to log messages
