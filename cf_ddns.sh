@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# author: jinqian 
+# 网站: jinqians.com
+
+echo "author: jinqian "
+echo "网站: jinqians.com"
+
+
 # Function to log messages
 log() {
     if [ "$1" ]; then
