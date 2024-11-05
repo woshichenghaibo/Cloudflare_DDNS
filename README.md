@@ -22,7 +22,7 @@ wget https://raw.githubusercontent.com/jinqians/cd_ddns/main/cf_ddns.sh
 使用`crontab -e`添加定时任务，例如5分钟执行一次
 
 ```shell
-*/5 * * * * /bin/bash/ <空格> /your path/cf_ddns.sh
+*/5 * * * * /bin/bash <空格> your path/cf_ddns.sh
 ```
 ## 其他相关说明
 ### 后续运行：
