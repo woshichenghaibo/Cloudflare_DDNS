@@ -1,133 +1,173 @@
 #!/bin/bash
 
-# author: jinqian 
-# 网站: jinqians.com
+# Grant execution permission to the script
+if [ ! -x "$0" ]; then
+    echo "Adding execution permission to the script..."
+    chmod +x "$0"
+    echo "Execution permission added, continuing to run the script..."
+fi
 
-echo -e "\033[1;31m author:\033[0m \033[1;32m jinqian \033[0m"
-echo -e "\033[1;31m website:\033[0m \033[1;32m https://jinqians.com \033[0m"
-
-
-
-# Function to log messages
-log() {
-    if [ "$1" ]; then
-        echo -e "[$(date)] - $1" >> $log_file
-    fi
-}
-
-# Configuration file
-config_file="cloudflare_config.txt"
-
-# Function to load configuration
-load_config() {
-    if [ -f $config_file ]; then
-        source $config_file
+# Check and install jq if not installed
+if ! command -v jq &> /dev/null
+then
+    echo "jq is not installed, installing now..."
+    if [ -f /etc/debian_version ]; then
+        # If it's a Debian/Ubuntu system
+        apt update
+        apt install -y jq
+    elif [ -f /etc/redhat-release ]; then
+        # If it's a CentOS/Red Hat system
+        yum install -y jq
     else
-        echo "Configuration file not found. Please run the script manually to configure."
+        echo "Unable to determine system type, please install jq manually."
         exit 1
     fi
+fi
+
+# Configuration file path
+CONFIG_FILE="/root/CF-DDNS.txt"
+
+# Read parameters from the configuration file
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+fi
+
+# Function: Prompt user to input Cloudflare API information
+function input_parameters() {
+    # Prompt for input only if these parameters are not in the config file
+    if [ -z "$CF_API_TOKEN" ]; then
+        read -p "Please enter your Cloudflare API token: " CF_API_TOKEN
+    fi
+    if [ -z "$CF_EMAIL" ]; then
+        read -p "Please enter your Cloudflare account email: " CF_EMAIL
+    fi
+    if [ -z "$DNS_NAME" ]; then
+        read -p "Please enter your domain (e.g., example.com): " DNS_NAME
+    fi
+    if [ -z "$DNS_RECORD" ]; then
+        read -p "Please enter the DNS record to update (e.g., www.example.com): " DNS_RECORD
+    fi
+
+    # Save the input parameters to the configuration file
+    echo "CF_API_TOKEN=$CF_API_TOKEN" > "$CONFIG_FILE"
+    echo "CF_EMAIL=$CF_EMAIL" >> "$CONFIG_FILE"
+    echo "DNS_NAME=$DNS_NAME" >> "$CONFIG_FILE"
+    echo "DNS_RECORD=$DNS_RECORD" >> "$CONFIG_FILE"
 }
 
-# Function to save configuration
-save_config() {
-    cat <<EOL > $config_file
-auth_email="$auth_email"
-auth_key="$auth_key"
-zone_name="$zone_name"
-record_name="$record_name"
-ip_type="$ip_type"
-EOL
+# Function: Display the current input parameters
+function display_parameters() {
+    echo "---------------------------------------"
+    echo "Current input parameters are as follows:"
+    echo "Cloudflare API token: $CF_API_TOKEN"
+    echo "Cloudflare account email: $CF_EMAIL"
+    echo "Domain: $DNS_NAME"
+    echo "DNS record: $DNS_RECORD"
+    echo "---------------------------------------"
 }
 
-# Check if configuration file exists
-if [ ! -f $config_file ]; then
-    # Get user inputs
-    read -p "Enter Cloudflare Auth Email: " auth_email
-    read -p "Enter Cloudflare Auth Key: " auth_key
-    read -p "Enter Zone Name (e.g., example.com): " zone_name
-    read -p "Enter Record Name (e.g., www.example.com): " record_name
+# Function: Modify parameters
+function modify_parameters() {
+    echo "Please select the parameter to modify:"
+    echo "1) Cloudflare API token"
+    echo "2) Cloudflare account email"
+    echo "3) Domain"
+    echo "4) DNS record"
+    echo "5) Do not modify, continue running the script"
+    read -p "Please enter your choice (1-5): " choice
 
-    # User chooses between IPv4 and IPv6
-    echo "Choose IP type to update:"
-    echo "1) IPv4"
-    echo "2) IPv6"
-    read -p "Enter choice [1 or 2]: " ip_choice
+    case $choice in
+        1) read -p "Please enter the new Cloudflare API token: " CF_API_TOKEN ;;
+        2) read -p "Please enter the new Cloudflare account email: " CF_EMAIL ;;
+        3) read -p "Please enter the new domain (e.g., example.com): " DNS_NAME ;;
+        4) read -p "Please enter the new DNS record (e.g., www.example.com): " DNS_RECORD ;;
+        5) return ;;
+        *) echo "Invalid option, please choose again." ;;
+    esac
 
-    if [ "$ip_choice" != "1" ] && [ "$ip_choice" != "2" ]; then
-        echo "Invalid choice."
-        exit 1
+    # Save the modified parameters to the configuration file
+    echo "CF_API_TOKEN=$CF_API_TOKEN" > "$CONFIG_FILE"
+    echo "CF_EMAIL=$CF_EMAIL" >> "$CONFIG_FILE"
+    echo "DNS_NAME=$DNS_NAME" >> "$CONFIG_FILE"
+    echo "DNS_RECORD=$DNS_RECORD" >> "$CONFIG_FILE"
+
+    # Display the modified parameters
+    display_parameters
+    modify_parameters  # Ask if further modifications are needed
+}
+
+# Main program: Determine if running in an interactive terminal
+if [ -t 0 ]; then
+    # If running interactively, prompt for input or modification of parameters
+    input_parameters
+    display_parameters
+
+    # Ask if modifications are needed
+    read -p "Do you need to modify the parameters? (y/n): " modify_choice
+    if [[ $modify_choice == "y" || $modify_choice == "Y" ]]; then
+        modify_parameters
     fi
-
-    if [ "$ip_choice" == "1" ]; then
-        ip_type="A"
-    else
-        ip_type="AAAA"
-    fi
-
-    # Save configuration
-    save_config
 else
-    # Load configuration
-    load_config
+    # If running as a cron job, use the parameters from the configuration file
+    echo "Script is running in non-interactive mode, using parameters from the configuration file."
 fi
 
-# Get current IP
-if [ "$ip_type" == "A" ]; then
-    ip=$(curl -s ip.sb -4)
-else
-    ip=$(curl -s ip.sb -6)
-fi
+# Get Zone ID
+ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$DNS_NAME" \
+     -H "X-Auth-Email: $CF_EMAIL" \
+     -H "X-Auth-Key: $CF_API_TOKEN" \
+     -H "Content-Type: application/json" | jq -r '.result[0].id')
 
-# Define file paths
-ip_file="ip.txt"
-id_file="cloudflare.ids"
-log_file="cloudflare.log"
-
-# Start logging
-log "Check Initiated"
-
-# Check if IP has changed
-if [ -f $ip_file ]; then
-    old_ip=$(cat $ip_file)
-    if [ "$ip" == "$old_ip" ]; then
-        echo "IP has not changed."
-        exit 0
-    fi
-fi
-
-# Get zone and record identifiers
-if [ -f $id_file ] && [ $(wc -l < $id_file) -eq 2 ]; then
-    zone_identifier=$(head -1 $id_file)
-    record_identifier=$(tail -1 $id_file)
-else
-    zone_identifier=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$zone_name" \
-                        -H "X-Auth-Email: $auth_email" \
-                        -H "X-Auth-Key: $auth_key" \
-                        -H "Content-Type: application/json" | grep -Po '(?<="id":")[^"]*' | head -1)
-    record_identifier=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_identifier/dns_records?name=$record_name" \
-                          -H "X-Auth-Email: $auth_email" \
-                          -H "X-Auth-Key: $auth_key" \
-                          -H "Content-Type: application/json" | grep -Po '(?<="id":")[^"]*')
-    echo "$zone_identifier" > $id_file
-    echo "$record_identifier" >> $id_file
-fi
-
-# Update DNS record
-update=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zone_identifier/dns_records/$record_identifier" \
-                -H "X-Auth-Email: $auth_email" \
-                -H "X-Auth-Key: $auth_key" \
-                -H "Content-Type: application/json" \
-                --data "{\"id\":\"$zone_identifier\",\"type\":\"$ip_type\",\"name\":\"$record_name\",\"content\":\"$ip\"}")
-
-# Check update result
-if [[ $update == *"\"success\":false"* ]]; then
-    message="API UPDATE FAILED. DUMPING RESULTS:\n$update"
-    log "$message"
-    echo -e "$message"
+# Check if Zone ID was successfully retrieved
+if [ -z "$ZONE_ID" ] || [ "$ZONE_ID" == "null" ]; then
+    echo "Failed to retrieve Zone ID, please check the domain or API configuration."
     exit 1
+fi
+
+# Get DNS record ID
+RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$DNS_RECORD" \
+     -H "X-Auth-Email: $CF_EMAIL" \
+     -H "X-Auth-Key: $CF_API_TOKEN" \
+     -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+# Check if DNS record ID was successfully retrieved
+if [ -z "$RECORD_ID" ] || [ "$RECORD_ID" == "null" ]; then
+    echo "Failed to retrieve DNS record ID, please check if the DNS record is correct."
+    exit 1
+fi
+
+# Get the current external IP
+CURRENT_IP=$(curl -s https://ifconfig.co)
+
+# Get the existing IP address in Cloudflare
+OLD_IP=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
+     -H "X-Auth-Email: $CF_EMAIL" \
+     -H "X-Auth-Key: $CF_API_TOKEN" \
+     -H "Content-Type: application/json" | jq -r '.result.content')
+
+# Debug output: Show IP addresses
+echo "Current server's external IP: $CURRENT_IP"
+echo "DNS record IP on Cloudflare: $OLD_IP"
+
+# Check if the IP has changed
+if [ "$CURRENT_IP" != "$OLD_IP" ]; then
+    echo "IP address has changed, updating Cloudflare DNS record..."
+
+    # Update DNS record
+    RESPONSE=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
+        -H "X-Auth-Email: $CF_EMAIL" \
+        -H "X-Auth-Key: $CF_API_TOKEN" \
+        -H "Content-Type: application/json" \
+        --data "{\"type\":\"AAAA\",\"name\":\"$DNS_RECORD\",\"content\":\"$CURRENT_IP\",\"proxied\":true}")
+
+    # Output API response
+    echo "API response: $RESPONSE"
+
+    if [[ $RESPONSE == *"\"success\":true"* ]]; then
+        echo "DNS record updated successfully, new IP: $CURRENT_IP"
+    else
+        echo "Failed to update DNS record, please check the response content."
+    fi
 else
-    message="IP changed to: $ip"
-    echo "$ip" > $ip_file
-    log "$message"
-    echo "$message"
+    echo "IP address has not changed, no update needed."
 fi
